@@ -66,7 +66,7 @@ runcmd(struct cmd *cmd)
 
   if(cmd == 0)
     exit();
-  
+
   switch(cmd->type){
   default:
     panic("runcmd");
@@ -120,7 +120,7 @@ runcmd(struct cmd *cmd)
     wait();
     wait();
     break;
-    
+
   case BACK:
     bcmd = (struct backcmd*)cmd;
     if(fork1() == 0)
@@ -131,9 +131,10 @@ runcmd(struct cmd *cmd)
 }
 
 int
-getcmd(char *buf, int nbuf)
+getcmd(char *buf, int nbuf, char* pwd)
 {
-  printf(2, "$ ");
+  printf(2, pwd);
+  printf(2, " ");
   memset(buf, 0, nbuf);
   gets(buf, nbuf);
   if(buf[0] == 0) // EOF
@@ -141,12 +142,54 @@ getcmd(char *buf, int nbuf)
   return 0;
 }
 
+void
+updatePwd(char *pwd,char *buf ) {
+    int i;
+
+    if (*buf == 0)
+        return;
+    if  (*buf == '/') { // ("/")
+        *pwd = '/';
+        memset(pwd+1,0,255);
+        updatePwd(pwd, &buf[1]);
+        return;
+    }
+    if ((*buf == '.') && (buf[1] == '.') &&
+        ((buf[2] == '/') || (buf[2] == 0)))  { // ("../") || (".."0)
+        i=strlen(pwd);
+        while ((i > 0) && (pwd[i] != '/'))
+            pwd[i--]=0;
+        if (buf[2] != 0) // not end of given path
+            updatePwd(pwd,&buf[3]);
+        return;
+    }
+    if ((*buf == '.') && ((buf[1] == '/') || (buf[1] == 0))) {
+        if (buf[1] != 0) // not end of given path
+            updatePwd(pwd,&buf[2]);
+        return;
+    }
+    i=strlen(pwd);
+    pwd[i++] = '/';
+    while ((*buf != 0) && (*buf != '/')) {
+        pwd[i++] = *buf;
+        buf++;
+    }
+    if (*buf == '/')
+        updatePwd(pwd,&buf[1]);
+}
+
 int
 main(void)
 {
   static char buf[100];
+  char *pwd = malloc(256*sizeof(char)); // current dir string
+  //  int i; //string position pointer
+
   int fd;
-  
+  // US - initialze the current dir string to "/000...0"
+  memset(pwd,0,256);
+  pwd[0]='/';
+
   // Assumes three file descriptors open.
   while((fd = open("console", O_RDWR)) >= 0){
     if(fd >= 3){
@@ -154,15 +197,38 @@ main(void)
       break;
     }
   }
-  
+
   // Read and run input commands.
-  while(getcmd(buf, sizeof(buf)) >= 0){
+  while(getcmd(buf, sizeof(buf), pwd) >= 0){
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
       // Clumsy but will have to do for now.
       // Chdir has no effect on the parent if run in the child.
       buf[strlen(buf)-1] = 0;  // chop \n
       if(chdir(buf+3) < 0)
         printf(2, "cannot cd %s\n", buf+3);
+      else // chdir syscall sucess
+          {
+
+
+              /* i=3; */
+              /* while (buf[i] != 0) { */
+              /*     if (buf[i] == '.') { */
+              /*         switch (buf[i+1]) { */
+
+              /*         case '/' : break; */
+              /*         case '.' : break; */
+              /*         } */
+              /*     } else */
+              /*              pwd[strlen(pwd)]=buf[i]; */
+              /* } */
+              /* /\* if *\/ */
+              /* /\* switch (buf[i]) { *\/ */
+              /* /\* case '' *\/ */
+              /*          } */
+              /* pwd[strlen(pwd)]= (pwd[strlen(pwd)-1] == '/' ? 0 : '/' ); */
+              /* strcpy(&pwd[strlen(pwd)],buf+3); */
+              updatePwd(pwd,&buf[3]);
+          }
       continue;
     }
     if(fork1() == 0)
@@ -171,6 +237,7 @@ main(void)
   }
   exit();
 }
+
 
 void
 panic(char *s)
@@ -183,7 +250,7 @@ int
 fork1(void)
 {
   int pid;
-  
+
   pid = fork();
   if(pid == -1)
     panic("fork");
@@ -268,7 +335,7 @@ gettoken(char **ps, char *es, char **q, char **eq)
 {
   char *s;
   int ret;
-  
+
   s = *ps;
   while(s < es && strchr(whitespace, *s))
     s++;
@@ -301,7 +368,7 @@ gettoken(char **ps, char *es, char **q, char **eq)
   }
   if(eq)
     *eq = s;
-  
+
   while(s < es && strchr(whitespace, *s))
     s++;
   *ps = s;
@@ -312,7 +379,7 @@ int
 peek(char **ps, char *es, char *toks)
 {
   char *s;
-  
+
   s = *ps;
   while(s < es && strchr(whitespace, *s))
     s++;
@@ -420,7 +487,7 @@ parseexec(char **ps, char *es)
   int tok, argc;
   struct execcmd *cmd;
   struct cmd *ret;
-  
+
   if(peek(ps, es, "("))
     return parseblock(ps, es);
 
@@ -459,7 +526,7 @@ nulterminate(struct cmd *cmd)
 
   if(cmd == 0)
     return 0;
-  
+
   switch(cmd->type){
   case EXEC:
     ecmd = (struct execcmd*)cmd;
@@ -478,7 +545,7 @@ nulterminate(struct cmd *cmd)
     nulterminate(pcmd->left);
     nulterminate(pcmd->right);
     break;
-    
+
   case LIST:
     lcmd = (struct listcmd*)cmd;
     nulterminate(lcmd->left);
