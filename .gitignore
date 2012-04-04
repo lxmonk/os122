@@ -1,4 +1,6 @@
 .svn
 *.o
 *.sym
-kernel
+*.img
+*.asm
+_*

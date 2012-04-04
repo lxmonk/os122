@@ -134,7 +134,7 @@ int
 getcmd(char *buf, int nbuf, char* pwd)
 {
   printf(2, pwd);
-  printf(2, " ");
+  printf(2, "/> ");
   memset(buf, 0, nbuf);
   gets(buf, nbuf);
   if(buf[0] == 0) // EOF
@@ -146,11 +146,12 @@ void
 updatePwd(char *pwd,char *buf ) {
     int i;
 
-    if (*buf == 0)		/* the end of the path */
+    if (*buf == 0) {		/* the end of the path */
         return;
-    if  (*buf == '/') { /* ("/") - only as the first char in the path */
-        *pwd = '/';	/* this is a path relative to the root */
-        memset(pwd+1,0,255);
+    }
+    if  (*buf == '/') { /* ("cd /") - only as the first char in the path */
+        /* *pwd = '/' */;	/* this is a path relative to the root */
+        memset(pwd,0,255);
         updatePwd(pwd, &buf[1]);
         return;
     }
@@ -158,8 +159,10 @@ updatePwd(char *pwd,char *buf ) {
         ((buf[2] == '/') || (buf[2] == 0)))  {  /*   ("../") || (".."0)
                                                    - cd to parent dir */
         i=strlen(pwd);
-        while ((i > 0) && (pwd[i] != '/'))
+        while ((i >= 0) && (pwd[i] != '/'))
             pwd[i--]=0;
+        if (pwd[i] == '/')
+            pwd[i] = 0;
         if (buf[2] != 0)  /* not the end of the given path */
             updatePwd(pwd,&buf[3]);
         return;
@@ -171,9 +174,16 @@ updatePwd(char *pwd,char *buf ) {
     }
     /* normal path string "cd a/b/c/D" */
     i=strlen(pwd);
+    /* if (pwd[i-1] != '/') */
     pwd[i++] = '/';
+    /* printf(2, "\n"); */
+    /* printf(2, buf); */
+    /* printf(2, "\n"); */
+
     while ((*buf != 0) && (*buf != '/')) {
-        pwd[i++] = *buf;
+        /* printf(2, "."); */
+        pwd[i++] = (*buf);
+        /* printf(2, pwd); */
         buf++;
     }
     if (*buf == '/')
@@ -189,7 +199,7 @@ main(void)
   int fd;
   // US - initialze the current dir string to "/000...0"
   memset(pwd,0,256);
-  pwd[0]='/';
+  /* pwd[0]='/'; */
 
   // Assumes three file descriptors open.
   while((fd = open("console", O_RDWR)) >= 0){
