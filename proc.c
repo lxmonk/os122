@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 
+void* memcpy(void *dst, const void *src, uint n);
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -69,6 +71,10 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  /* A&T - SIGNALS begin */
+  p->signal = 0;
+  memset(p->handlers, 0, 32);   /* initialize handlers to 0 (NULL) */
+  /* A&T - SIGNAL end */
 
   return p;
 }
@@ -145,6 +151,8 @@ fork(void)
   np->sz = proc->sz;
   np->parent = proc;
   *np->tf = *proc->tf;
+  memcpy(np->handlers, proc->handlers, 32); /* A&T - deep-copy the array of
+                                               handlers from the parent. */
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -302,9 +310,9 @@ scheduler(void)
           handler = &proc->handlers[31];
           while(mask > 0) {/* a mask to check whether a signal's
                               bit is up */
-              if (p->signal & mask)
+              if ((p->signal & mask) && (*handler != 0))
                   register_handler(*handler); /* add the handler to
-                                                 the stack. */
+                                                 the stack, if it exists */
 
               mask >>= 1;	/* move the mask to the next bit to check. */
               handler--;	/* move the pointer to the next hendler */
