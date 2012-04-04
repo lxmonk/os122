@@ -141,21 +141,22 @@ getcmd(char *buf, int nbuf, char* pwd)
     return -1;
   return 0;
 }
-
+// A&T - updates the current dir according to the buffer
 void
 updatePwd(char *pwd,char *buf ) {
     int i;
 
     if (*buf == 0)
         return;
-    if  (*buf == '/') { // ("/")
+    if  (*buf == '/') { //A&T - buffer is  "/" - return to home dir
         *pwd = '/';
         memset(pwd+1,0,255);
         updatePwd(pwd, &buf[1]);
         return;
     }
+    // A&T buffer is  "../" or  ".." - go back 1 dir
     if ((*buf == '.') && (buf[1] == '.') &&
-        ((buf[2] == '/') || (buf[2] == 0)))  { // ("../") || (".."0)
+        ((buf[2] == '/') || (buf[2] == 0)))  {
         i=strlen(pwd);
         while ((i > 0) && (pwd[i] != '/'))
             pwd[i--]=0;
@@ -163,11 +164,13 @@ updatePwd(char *pwd,char *buf ) {
             updatePwd(pwd,&buf[3]);
         return;
     }
+    //A&T buffer is "./" or ." - ignore this
     if ((*buf == '.') && ((buf[1] == '/') || (buf[1] == 0))) {
         if (buf[1] != 0) // not end of given path
             updatePwd(pwd,&buf[2]);
         return;
     }
+    //A&T current buffer is not a special mark
     i=strlen(pwd);
     pwd[i++] = '/';
     while ((*buf != 0) && (*buf != '/')) {
@@ -183,10 +186,9 @@ main(void)
 {
   static char buf[100];
   char *pwd = malloc(256*sizeof(char)); // current dir string
-  //  int i; //string position pointer
 
   int fd;
-  // US - initialze the current dir string to "/000...0"
+  // A&T - initialze the current dir string to "/000...0"
   memset(pwd,0,256);
   pwd[0]='/';
 

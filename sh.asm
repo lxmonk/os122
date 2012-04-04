@@ -272,7 +272,7 @@ getcmd(char *buf, int nbuf, char* pwd)
      278:	c3                   	ret    
 
 00000279 <updatePwd>:
-
+// A&T - updates the current dir according to the buffer
 void
 updatePwd(char *pwd,char *buf ) {
      279:	55                   	push   %ebp
@@ -286,7 +286,7 @@ updatePwd(char *pwd,char *buf ) {
      285:	84 c0                	test   %al,%al
      287:	0f 84 8c 01 00 00    	je     419 <updatePwd+0x1a0>
         return;
-    if  (*buf == '/') { // ("/")
+    if  (*buf == '/') { //A&T - buffer is  "/" - return to home dir
      28d:	8b 45 0c             	mov    0xc(%ebp),%eax
      290:	0f b6 00             	movzbl (%eax),%eax
      293:	3c 2f                	cmp    $0x2f,%al
@@ -313,6 +313,7 @@ updatePwd(char *pwd,char *buf ) {
         return;
      2d0:	e9 4b 01 00 00       	jmp    420 <updatePwd+0x1a7>
     }
+    // A&T buffer is  "../" or  ".." - go back 1 dir
     if ((*buf == '.') && (buf[1] == '.') &&
      2d5:	8b 45 0c             	mov    0xc(%ebp),%eax
      2d8:	0f b6 00             	movzbl (%eax),%eax
@@ -323,31 +324,31 @@ updatePwd(char *pwd,char *buf ) {
      2e9:	0f b6 00             	movzbl (%eax),%eax
      2ec:	3c 2e                	cmp    $0x2e,%al
      2ee:	75 75                	jne    365 <updatePwd+0xec>
-        ((buf[2] == '/') || (buf[2] == 0)))  { // ("../") || (".."0)
+        ((buf[2] == '/') || (buf[2] == 0)))  {
      2f0:	8b 45 0c             	mov    0xc(%ebp),%eax
      2f3:	83 c0 02             	add    $0x2,%eax
      2f6:	0f b6 00             	movzbl (%eax),%eax
-        *pwd = '/';
         memset(pwd+1,0,255);
         updatePwd(pwd, &buf[1]);
         return;
     }
+    // A&T buffer is  "../" or  ".." - go back 1 dir
     if ((*buf == '.') && (buf[1] == '.') &&
      2f9:	3c 2f                	cmp    $0x2f,%al
      2fb:	74 0d                	je     30a <updatePwd+0x91>
-        ((buf[2] == '/') || (buf[2] == 0)))  { // ("../") || (".."0)
+        ((buf[2] == '/') || (buf[2] == 0)))  {
      2fd:	8b 45 0c             	mov    0xc(%ebp),%eax
      300:	83 c0 02             	add    $0x2,%eax
      303:	0f b6 00             	movzbl (%eax),%eax
-        *pwd = '/';
         memset(pwd+1,0,255);
         updatePwd(pwd, &buf[1]);
         return;
     }
+    // A&T buffer is  "../" or  ".." - go back 1 dir
     if ((*buf == '.') && (buf[1] == '.') &&
      306:	84 c0                	test   %al,%al
      308:	75 5b                	jne    365 <updatePwd+0xec>
-        ((buf[2] == '/') || (buf[2] == 0)))  { // ("../") || (".."0)
+        ((buf[2] == '/') || (buf[2] == 0)))  {
         i=strlen(pwd);
      30a:	8b 45 08             	mov    0x8(%ebp),%eax
      30d:	89 04 24             	mov    %eax,(%esp)
@@ -360,10 +361,10 @@ updatePwd(char *pwd,char *buf ) {
      31d:	03 45 08             	add    0x8(%ebp),%eax
      320:	c6 00 00             	movb   $0x0,(%eax)
      323:	83 6d f4 01          	subl   $0x1,-0xc(%ebp)
-        return;
     }
+    // A&T buffer is  "../" or  ".." - go back 1 dir
     if ((*buf == '.') && (buf[1] == '.') &&
-        ((buf[2] == '/') || (buf[2] == 0)))  { // ("../") || (".."0)
+        ((buf[2] == '/') || (buf[2] == 0)))  {
         i=strlen(pwd);
         while ((i > 0) && (pwd[i] != '/'))
      327:	83 7d f4 00          	cmpl   $0x0,-0xc(%ebp)
@@ -390,6 +391,7 @@ updatePwd(char *pwd,char *buf ) {
         return;
      360:	e9 bb 00 00 00       	jmp    420 <updatePwd+0x1a7>
     }
+    //A&T buffer is "./" or ." - ignore this
     if ((*buf == '.') && ((buf[1] == '/') || (buf[1] == 0))) {
      365:	8b 45 0c             	mov    0xc(%ebp),%eax
      368:	0f b6 00             	movzbl (%eax),%eax
@@ -421,6 +423,7 @@ updatePwd(char *pwd,char *buf ) {
         return;
      3af:	eb 6f                	jmp    420 <updatePwd+0x1a7>
     }
+    //A&T current buffer is not a special mark
     i=strlen(pwd);
      3b1:	8b 45 08             	mov    0x8(%ebp),%eax
      3b4:	89 04 24             	mov    %eax,(%esp)
@@ -442,9 +445,9 @@ updatePwd(char *pwd,char *buf ) {
      3dc:	83 45 f4 01          	addl   $0x1,-0xc(%ebp)
         buf++;
      3e0:	83 45 0c 01          	addl   $0x1,0xc(%ebp)
-            updatePwd(pwd,&buf[2]);
         return;
     }
+    //A&T current buffer is not a special mark
     i=strlen(pwd);
     pwd[i++] = '/';
     while ((*buf != 0) && (*buf != '/')) {
@@ -489,6 +492,7 @@ updatePwd(char *pwd,char *buf ) {
      41c:	90                   	nop
      41d:	eb 01                	jmp    420 <updatePwd+0x1a7>
     }
+    //A&T buffer is "./" or ." - ignore this
     if ((*buf == '.') && ((buf[1] == '/') || (buf[1] == 0))) {
         if (buf[1] != 0) // not end of given path
             updatePwd(pwd,&buf[2]);
@@ -517,10 +521,9 @@ main(void)
      42b:	c7 04 24 00 01 00 00 	movl   $0x100,(%esp)
      432:	e8 8c 11 00 00       	call   15c3 <malloc>
      437:	89 44 24 18          	mov    %eax,0x18(%esp)
-  //  int i; //string position pointer
 
   int fd;
-  // US - initialze the current dir string to "/000...0"
+  // A&T - initialze the current dir string to "/000...0"
   memset(pwd,0,256);
      43b:	c7 44 24 08 00 01 00 	movl   $0x100,0x8(%esp)
      442:	00 
@@ -551,7 +554,7 @@ main(void)
   // Read and run input commands.
   while(getcmd(buf, sizeof(buf), pwd) >= 0){
      474:	e9 c1 00 00 00       	jmp    53a <main+0x118>
-  // US - initialze the current dir string to "/000...0"
+  // A&T - initialze the current dir string to "/000...0"
   memset(pwd,0,256);
   pwd[0]='/';
 
