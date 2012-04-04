@@ -60,7 +60,7 @@ sys_sleep(void)
 {
   int n;
   uint ticks0;
-  
+
   if(argint(0, &n) < 0)
     return -1;
   acquire(&tickslock);
@@ -82,9 +82,33 @@ int
 sys_uptime(void)
 {
   uint xticks;
-  
+
   acquire(&tickslock);
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+/* A&T - signal syscall */
+int sys_signal(void)
+{
+    int signum;
+    int handler;
+
+    if ((argint(0, &signum) < 0) || (argint(1, &handler) < 0))
+        return -1;
+
+    proc->handlers[signum] = (sighandler_t)handler;
+    return 0;
+}
+
+/* A&T - sigsend syscall */
+int sys_sigsend(void)
+{
+    int pid;
+    int signum;
+
+    if ((argint(0, &pid) < 0) || (argint(1, &signum) < 0))
+        return -1;
+    return sigsend(pid, signum);
 }

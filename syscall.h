@@ -21,3 +21,8 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
+
+/* A&T signal syscall */
+#define SYS_signal 22
+/* A&T sigsend syscall */
+#define SYS_sigsend 23

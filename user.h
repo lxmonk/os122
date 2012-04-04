@@ -1,5 +1,8 @@
 struct stat;
 
+/* A&T - for use in 'int signal(int, sighandler_t)' */
+typedef void (*sighandler_t)(void);
+
 // system calls
 int fork(void);
 int exit(void) __attribute__((noreturn));
@@ -22,6 +25,9 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+/* A&T syscalls */
+int signal(int, sighandler_t);
+int sigsend(int, int);
 
 // ulib.c
 int stat(char*, struct stat*);

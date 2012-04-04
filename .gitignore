@@ -5,3 +5,4 @@
 *.asm
 _*
 kernel
+.gdbinit

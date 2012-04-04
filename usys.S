@@ -29,3 +29,5 @@ SYSCALL(getpid)
 SYSCALL(sbrk)
 SYSCALL(sleep)
 SYSCALL(uptime)
+SYSCALL(signal)                 /* A&T signal system call*/
+SYSCALL(sigsend)                /* A&T sigsend system call*/

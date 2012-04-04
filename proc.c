@@ -55,11 +55,11 @@ found:
     return 0;
   }
   sp = p->kstack + KSTACKSIZE;
-  
+
   // Leave room for trap frame.
   sp -= sizeof *p->tf;
   p->tf = (struct trapframe*)sp;
-  
+
   // Set up new context to start executing at forkret,
   // which returns to trapret.
   sp -= 4;
@@ -80,7 +80,7 @@ userinit(void)
 {
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
-  
+
   p = allocproc();
   initproc = p;
   if((p->pgdir = setupkvm(kalloc)) == 0)
@@ -108,7 +108,7 @@ int
 growproc(int n)
 {
   uint sz;
-  
+
   sz = proc->sz;
   if(n > 0){
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
@@ -153,7 +153,7 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
- 
+
   pid = np->pid;
   np->state = RUNNABLE;
   safestrcpy(np->name, proc->name, sizeof(proc->name));
@@ -275,6 +275,8 @@ void
 scheduler(void)
 {
   struct proc *p;
+  int mask;
+  sighandler_t *handler;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -291,6 +293,26 @@ scheduler(void)
       // before jumping back to us.
       proc = p;
       switchuvm(p);
+
+      /* A&T - SIGNALS start */
+      if (p->signal > 0) {	/* A&T - were any signals recieved? */
+          mask = (1 << 31);	/* the stack is a LIFO structure, so
+                                 * we'll be pushing the LEAST important
+                                 * signals first, so they'll run last. */
+          handler = &proc->handlers[31];
+          while(mask > 0) {/* a mask to check whether a signal's
+                              bit is up */
+              if (p->signal & mask)
+                  register_handler(*handler); /* add the handler to
+                                                 the stack. */
+
+              mask >>= 1;	/* move the mask to the next bit to check. */
+              handler--;	/* move the pointer to the next hendler */
+          }
+          p->signal = 0;	/* initialize the signal data word to 0 */
+      }
+      /* A&T - SIGNALS end */
+
       p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
@@ -345,12 +367,12 @@ forkret(void)
 
   if (first) {
     // Some initialization functions must be run in the context
-    // of a regular process (e.g., they call sleep), and thus cannot 
+    // of a regular process (e.g., they call sleep), and thus cannot
     // be run from main().
     first = 0;
     initlog();
   }
-  
+
   // Return to "caller", actually trapret (see allocproc).
 }
 
@@ -455,7 +477,7 @@ procdump(void)
   struct proc *p;
   char *state;
   uint pc[10];
-  
+
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == UNUSED)
       continue;
@@ -474,3 +496,16 @@ procdump(void)
 }
 
 
+/* A&T sigsend */
+int
+sigsend(int pid, int signum) {
+    struct proc *p;
+
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->pid == pid){
+            p->signal |= (1 << signum);
+            return 0;
+        }
+    }
+    return -1;                  /* no process with this pid */
+}
