@@ -28,6 +28,26 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 }
 
+/*A&T default  signals 0-3 */
+
+/*A&T terminates a process */
+void  sigint() {
+    proc->killed = 1;
+}
+
+void sigusr1() {
+    cprintf("SIGUSR1 %d\n",proc->pid);
+}
+
+void sigusr2() {
+    cprintf("SIGUSR2 %d\n",proc->pid);
+}
+
+void sigchld() {
+    sigsend(proc->parent->pid,SIGCHLD);
+}
+//A&T end of default signals
+
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
 // If found, change state to EMBRYO and initialize
@@ -74,6 +94,11 @@ found:
   /* A&T - SIGNALS begin */
   p->signal = 0;
   memset(p->handlers, 0, 32);   /* initialize handlers to 0 (NULL) */
+  p->handlers[0]=&sigint;
+  p->handlers[1]=&sigusr1;
+  p->handlers[2]=&sigusr2;
+  p->handlers[3]=&sigchld;
+
   /* A&T - SIGNAL end */
 
   return p;
@@ -193,6 +218,10 @@ exit(void)
 
   acquire(&ptable.lock);
 
+  //A&T sent a SIGCHLD to the parent process
+  sigsend(proc->parent->pid,SIGCHLD);
+
+
   // Parent might be sleeping in wait().
   wakeup1(proc->parent);
 
@@ -204,7 +233,6 @@ exit(void)
         wakeup1(initproc);
     }
   }
-
   // Jump into the scheduler, never to return.
   proc->state = ZOMBIE;
   sched();

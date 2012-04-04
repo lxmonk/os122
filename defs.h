@@ -117,6 +117,12 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 
+//A&T signal macros
+#define SIGINT  0
+#define SIGUSR1 1
+#define SIGUSR2 2
+#define SIGCHLD 3
+
 // swtch.S
 void            swtch(struct context**, struct context*);
 
