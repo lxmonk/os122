@@ -146,28 +146,30 @@ void
 updatePwd(char *pwd,char *buf ) {
     int i;
 
-    if (*buf == 0)
+    if (*buf == 0)		/* the end of the path */
         return;
-    if  (*buf == '/') { // ("/")
-        *pwd = '/';
+    if  (*buf == '/') { /* ("/") - only as the first char in the path */
+        *pwd = '/';	/* this is a path relative to the root */
         memset(pwd+1,0,255);
         updatePwd(pwd, &buf[1]);
         return;
     }
     if ((*buf == '.') && (buf[1] == '.') &&
-        ((buf[2] == '/') || (buf[2] == 0)))  { // ("../") || (".."0)
+        ((buf[2] == '/') || (buf[2] == 0)))  {  /*   ("../") || (".."0)
+                                                   - cd to parent dir */
         i=strlen(pwd);
         while ((i > 0) && (pwd[i] != '/'))
             pwd[i--]=0;
-        if (buf[2] != 0) // not end of given path
+        if (buf[2] != 0)  /* not the end of the given path */
             updatePwd(pwd,&buf[3]);
         return;
     }
     if ((*buf == '.') && ((buf[1] == '/') || (buf[1] == 0))) {
-        if (buf[1] != 0) // not end of given path
+        if (buf[1] != 0) /* not the end of the given path */
             updatePwd(pwd,&buf[2]);
         return;
     }
+    /* normal path string "cd a/b/c/D" */
     i=strlen(pwd);
     pwd[i++] = '/';
     while ((*buf != 0) && (*buf != '/')) {
@@ -183,7 +185,6 @@ main(void)
 {
   static char buf[100];
   char *pwd = malloc(256*sizeof(char)); // current dir string
-  //  int i; //string position pointer
 
   int fd;
   // US - initialze the current dir string to "/000...0"
@@ -206,27 +207,8 @@ main(void)
       buf[strlen(buf)-1] = 0;  // chop \n
       if(chdir(buf+3) < 0)
         printf(2, "cannot cd %s\n", buf+3);
-      else // chdir syscall sucess
+      else // chdir syscall successful
           {
-
-
-              /* i=3; */
-              /* while (buf[i] != 0) { */
-              /*     if (buf[i] == '.') { */
-              /*         switch (buf[i+1]) { */
-
-              /*         case '/' : break; */
-              /*         case '.' : break; */
-              /*         } */
-              /*     } else */
-              /*              pwd[strlen(pwd)]=buf[i]; */
-              /* } */
-              /* /\* if *\/ */
-              /* /\* switch (buf[i]) { *\/ */
-              /* /\* case '' *\/ */
-              /*          } */
-              /* pwd[strlen(pwd)]= (pwd[strlen(pwd)-1] == '/' ? 0 : '/' ); */
-              /* strcpy(&pwd[strlen(pwd)],buf+3); */
               updatePwd(pwd,&buf[3]);
           }
       continue;
