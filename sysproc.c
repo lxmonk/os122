@@ -99,6 +99,7 @@ int sys_signal(void)
         return -1;
 
     proc->handlers[signum] = (sighandler_t)handler;
+
     return 0;
 }
 

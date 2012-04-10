@@ -137,7 +137,10 @@ getcmd(char *buf, int nbuf, char* pwd)
   printf(2, "/> ");
   memset(buf, 0, nbuf);
   gets(buf, nbuf);
-  if(buf[0] == 0) // EOF
+
+  /* printf(2, "after getcmd:gets, buf = %s", buf); */
+
+  if(buf[0] == 0) // EF
     return -1;
   return 0;
 }
@@ -147,30 +150,30 @@ updatePwd(char *pwd,char *buf ) {
     int i;
 
     if (*buf == 0) {		/* the end of the path */
-	return;
+        return;
     }
     if  (*buf == '/') { /* ("cd /") - only as the first char in the path */
-	/* *pwd = '/' */;	/* this is a path relative to the root */
-	memset(pwd,0,256);
-	updatePwd(pwd, &buf[1]);
-	return;
+        /* *pwd = '/' */;	/* this is a path relative to the root */
+        memset(pwd,0,256);
+        updatePwd(pwd, &buf[1]);
+        return;
     }
     if ((*buf == '.') && (buf[1] == '.') &&
-	((buf[2] == '/') || (buf[2] == 0)))  {  /*   ("../") || (".."0)
-						   - cd to parent dir */
-	i=strlen(pwd);
-	while ((i >= 0) && (pwd[i] != '/'))
-	    pwd[i--]=0;
-	if (pwd[i] == '/')
-	    pwd[i] = 0;
-	if (buf[2] != 0)  /* not the end of the given path */
-	    updatePwd(pwd,&buf[3]);
-	return;
+        ((buf[2] == '/') || (buf[2] == 0)))  {  /*   ("../") || (".."0)
+                                                   - cd to parent dir */
+        i=strlen(pwd);
+        while ((i >= 0) && (pwd[i] != '/'))
+            pwd[i--]=0;
+        if (pwd[i] == '/')
+            pwd[i] = 0;
+        if (buf[2] != 0)  /* not the end of the given path */
+            updatePwd(pwd,&buf[3]);
+        return;
     }
     if ((*buf == '.') && ((buf[1] == '/') || (buf[1] == 0))) {
-	if (buf[1] != 0) /* not the end of the given path */
-	    updatePwd(pwd,&buf[2]);
-	return;
+        if (buf[1] != 0) /* not the end of the given path */
+            updatePwd(pwd,&buf[2]);
+        return;
     }
     /* normal path string "cd a/b/c/D" */
     i=strlen(pwd);
@@ -181,13 +184,13 @@ updatePwd(char *pwd,char *buf ) {
     /* printf(2, "\n"); */
 
     while ((*buf != 0) && (*buf != '/')) {
-	/* printf(2, "."); */
-	pwd[i++] = (*buf);
-	/* printf(2, pwd); */
-	buf++;
+        /* printf(2, "."); */
+        pwd[i++] = (*buf);
+        /* printf(2, pwd); */
+        buf++;
     }
     if (*buf == '/')
-	updatePwd(pwd,&buf[1]);
+        updatePwd(pwd,&buf[1]);
 }
 
 int
@@ -216,17 +219,18 @@ main(void)
       // Chdir has no effect on the parent if run in the child.
       buf[strlen(buf)-1] = 0;  // chop \n
       if(chdir(buf+3) < 0)
-	printf(2, "cannot cd %s\n", buf+3);
+        printf(2, "cannot cd %s\n", buf+3);
       else // chdir syscall successful
-	  {
-	      updatePwd(pwd,&buf[3]);
-	  }
+          {
+              updatePwd(pwd,&buf[3]);
+          }
       continue;
     }
     if(fork1() == 0)
       runcmd(parsecmd(buf));
     wait();
   }
+  free(pwd);
   exit();
 }
 

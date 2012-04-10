@@ -31,21 +31,23 @@ pinit(void)
 /*A&T default  signals 0-3 */
 
 /*A&T terminates a process */
+
+void sigusr1() {
+    cprintf("SIGUSR1 %d\n", proc->pid);
+}
+
+void sigusr2() {
+    cprintf("SIGUSR2 %d\n", proc->pid);
+}
+
+void sigchld() {
+    sigsend(proc->parent->pid, SIGCHLD);
+}
+
 void  sigint() {
     proc->killed = 1;
 }
 
-void sigusr1() {
-    cprintf("SIGUSR1 %d\n",proc->pid);
-}
-
-void sigusr2() {
-    cprintf("SIGUSR2 %d\n",proc->pid);
-}
-
-void sigchld() {
-    sigsend(proc->parent->pid,SIGCHLD);
-}
 //A&T end of default signals
 
 //PAGEBREAK: 32
@@ -92,13 +94,9 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
   /* A&T - SIGNALS begin */
+
   p->signal = 0;
   memset(p->handlers, 0, 32);   /* initialize handlers to 0 (NULL) */
-  p->handlers[0]=&sigint;
-  p->handlers[1]=&sigusr1;
-  p->handlers[2]=&sigusr2;
-  p->handlers[3]=&sigchld;
-
   /* A&T - SIGNAL end */
 
   return p;
@@ -311,7 +309,7 @@ void
 scheduler(void)
 {
   struct proc *p;
-  int mask;
+  uint mask;
   sighandler_t *handler;
 
   for(;;){
@@ -331,19 +329,40 @@ scheduler(void)
       switchuvm(p);
 
       /* A&T - SIGNALS start */
-      if (p->signal > 0) {	/* A&T - were any signals recieved? */
+      if (p->signal != 0) {	/* A&T - were any signals recieved? */
+          /* cprintf("DEBUG: pid=%d, p->signal=%d\n", p->pid, p->signal); */
           mask = (1 << 31);	/* the stack is a LIFO structure, so
                                  * we'll be pushing the LEAST important
                                  * signals first, so they'll run last. */
+          /* cprintf("DEBUG: mask=%d\n", mask); */
           handler = &proc->handlers[31];
-          while(mask > 0) {/* a mask to check whether a signal's
-                              bit is up */
+          while(mask > 8) {/* a mask to check whether a signal's
+                              bit is up - not for builtin 3 signal
+                              hadlers, since they should be called
+                              from kernel space and not userspace. */
               if ((p->signal & mask) && (*handler != 0))
                   register_handler(*handler); /* add the handler to
                                                  the stack, if it exists */
 
+
               mask >>= 1;	/* move the mask to the next bit to check. */
               handler--;	/* move the pointer to the next hendler */
+          }
+          while (mask > 0) {
+              if (p->signal & mask) {
+                  if (*handler == 0) /* call the built-in handler */
+                      switch(mask) {
+                      case 8: sigchld(); break;
+                      case 4: sigusr2(); break;
+                      case 2: sigusr1(); break;
+                      case 1: sigint(); break;
+                      default: break;
+                      }
+                  else
+                      register_handler(*handler);
+              }
+              mask >>= 1;
+              handler--;
           }
           p->signal = 0;	/* initialize the signal data word to 0 */
       }
