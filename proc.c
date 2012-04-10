@@ -549,6 +549,21 @@ procdump(void)
     cprintf("\n");
   }
 }
+//A&T - kills a process after ^C is preesend
+void
+killcurrent()
+{
+    struct proc *p;
+
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if ((p != initproc) && (p->state != UNUSED) && (p->state != EMBRYO)
+              && !((p->name[0] == 's') &&
+               (p->name[1] == 'h') && (p->name[2] == 0))){
+            sigsend(p->pid,SIGINT);
+            return;
+        }
+    }
+}
 
 
 /* A&T sigsend */

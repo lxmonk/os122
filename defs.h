@@ -116,6 +116,8 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+//A&T - sends SIGINT to current running process
+void            killcurrent(void);
 
 //A&T signal macros
 #define SIGINT  0

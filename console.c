@@ -193,7 +193,7 @@ consoleintr(int (*getc)(void))
   while((c = getc()) >= 0){
       switch(c){
       case C('C'): // A&T sigint
-          sigsend(proc->pid,SIGINT);
+          killcurrent(); // A&T -  sending the SIGINT in proc.c
           break;
       case C('P'):  // Process listing.
       procdump();
