@@ -45,9 +45,6 @@ loop_parent(int pids[]) {
                 }
             }
         }
-        sleep(50);		/* return to the scheduler, so the
-                                   process could be notified about
-                                   any pending SIGCHLDs. */
     }
     exit();
 }
