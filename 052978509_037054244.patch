@@ -1,0 +1,855 @@
+Index: sanity.c
+===================================================================
+--- sanity.c	(revision 0)
++++ sanity.c	(revision 0)
+@@ -0,0 +1,80 @@
++#include "types.h"
++#include "user.h"
++
++void yield();		/* forward decleration. */
++
++static int alive = 3;
++
++void
++loop_child() {
++    for (;;) {			/* TODO: sleep for 1/2 second?? */
++        sleep(500);
++    }
++}
++
++void
++loop_parent(int pids[]) {
++    int child;
++    char buf[20];
++    int do2;
++
++    while (alive > 0) {
++        do2 = 1;
++        printf(2, "Enter a child id (0-2):\n");
++        gets(buf, 20);
++        switch(buf[0]) {
++        case '0': child = 0; break;
++        case '1': child = 1; break;
++        case '2': child = 2; break;
++        default: /* printf(2, "in default\n"); */ do2 = 0; break;
++        }
++        if (pids[child] == -1) {
++            do2 = 0;
++            printf(2, "process already dead.\n");
++        }
++        if (do2) {
++            printf(2, "Which signal to send: \n");
++            gets(buf, 20);
++            if (buf[1] == 10) {
++                switch(buf[0]) {
++                case '0': sigsend(pids[child], 0); pids[child] = -1; wait(); break;
++                case '1': sigsend(pids[child], 1); break;
++                case '2': sigsend(pids[child], 2); break;
++                case '3': sigsend(pids[child], 3); break;
++                case '4': sigsend(pids[child], 4); break;
++                }
++            }
++        }
++    }
++    exit();
++}
++
++void
++mySigChld() {
++    alive--;
++    /* printf(2, "DEBUG: inside mySigChld. alive=%d\n", alive); */
++}
++void
++sig4() {
++    printf(2, "ouch %d\n", getpid());
++}
++
++int
++main() {
++    int pids[3];
++    /* int ppid = getpid(); */
++
++    int cpid, i;
++    for (i = 0; i < 3; i++) {   /* fixme: 3 */
++        if ((cpid = fork()) == 0) {
++            /* printf(2, "child %d inside loop: pid=%d\n", i, getpid()); */
++            signal(4, &sig4);
++            loop_child();
++            /* printf(2, "after loop_child (should NEVER print) %d", getpid()); */
++        }
++        pids[i] = cpid;
++    }
++    signal(3, &mySigChld);
++    loop_parent(pids);
++    return 0;
++}
+Index: sh.c
+===================================================================
+--- sh.c	(revision 1)
++++ sh.c	(working copy)
+@@ -66,7 +66,7 @@
+ 
+   if(cmd == 0)
+     exit();
+-  
++
+   switch(cmd->type){
+   default:
+     panic("runcmd");
+@@ -120,7 +120,7 @@
+     wait();
+     wait();
+     break;
+-    
++
+   case BACK:
+     bcmd = (struct backcmd*)cmd;
+     if(fork1() == 0)
+@@ -131,22 +131,79 @@
+ }
+ 
+ int
+-getcmd(char *buf, int nbuf)
++getcmd(char *buf, int nbuf, char* pwd)
+ {
+-  printf(2, "$ ");
++  printf(2, pwd);
++  printf(2, "/> ");
+   memset(buf, 0, nbuf);
+   gets(buf, nbuf);
+-  if(buf[0] == 0) // EOF
++
++  /* printf(2, "after getcmd:gets, buf = %s", buf); */
++
++  if(buf[0] == 0) // EF
+     return -1;
+   return 0;
+ }
+ 
++void
++updatePwd(char *pwd,char *buf ) {
++    int i;
++
++    if (*buf == 0) {		/* the end of the path */
++        return;
++    }
++    if  (*buf == '/') { /* ("cd /") - only as the first char in the path */
++        /* *pwd = '/' */;	/* this is a path relative to the root */
++        memset(pwd,0,256);
++        updatePwd(pwd, &buf[1]);
++        return;
++    }
++    if ((*buf == '.') && (buf[1] == '.') &&
++        ((buf[2] == '/') || (buf[2] == 0)))  {  /*   ("../") || (".."0)
++                                                   - cd to parent dir */
++        i=strlen(pwd);
++        while ((i >= 0) && (pwd[i] != '/'))
++            pwd[i--]=0;
++        if (pwd[i] == '/')
++            pwd[i] = 0;
++        if (buf[2] != 0)  /* not the end of the given path */
++            updatePwd(pwd,&buf[3]);
++        return;
++    }
++    if ((*buf == '.') && ((buf[1] == '/') || (buf[1] == 0))) {
++        if (buf[1] != 0) /* not the end of the given path */
++            updatePwd(pwd,&buf[2]);
++        return;
++    }
++    /* normal path string "cd a/b/c/D" */
++    i=strlen(pwd);
++    /* if (pwd[i-1] != '/') */
++    pwd[i++] = '/';
++    /* printf(2, "\n"); */
++    /* printf(2, buf); */
++    /* printf(2, "\n"); */
++
++    while ((*buf != 0) && (*buf != '/')) {
++        /* printf(2, "."); */
++        pwd[i++] = (*buf);
++        /* printf(2, pwd); */
++        buf++;
++    }
++    if (*buf == '/')
++        updatePwd(pwd,&buf[1]);
++}
++
+ int
+ main(void)
+ {
+   static char buf[100];
++  char *pwd = malloc(256*sizeof(char)); // current dir string
++
+   int fd;
+-  
++  // US - initialze the current dir string to "/000...0"
++  memset(pwd,0,256);
++  /* pwd[0]='/'; */
++
+   // Assumes three file descriptors open.
+   while((fd = open("console", O_RDWR)) >= 0){
+     if(fd >= 3){
+@@ -154,24 +211,30 @@
+       break;
+     }
+   }
+-  
++
+   // Read and run input commands.
+-  while(getcmd(buf, sizeof(buf)) >= 0){
++  while(getcmd(buf, sizeof(buf), pwd) >= 0){
+     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
+       // Clumsy but will have to do for now.
+       // Chdir has no effect on the parent if run in the child.
+       buf[strlen(buf)-1] = 0;  // chop \n
+       if(chdir(buf+3) < 0)
+         printf(2, "cannot cd %s\n", buf+3);
++      else // chdir syscall successful
++          {
++              updatePwd(pwd,&buf[3]);
++          }
+       continue;
+     }
+     if(fork1() == 0)
+       runcmd(parsecmd(buf));
+     wait();
+   }
++  free(pwd);
+   exit();
+ }
+ 
++
+ void
+ panic(char *s)
+ {
+@@ -183,7 +246,7 @@
+ fork1(void)
+ {
+   int pid;
+-  
++
+   pid = fork();
+   if(pid == -1)
+     panic("fork");
+@@ -268,7 +331,7 @@
+ {
+   char *s;
+   int ret;
+-  
++
+   s = *ps;
+   while(s < es && strchr(whitespace, *s))
+     s++;
+@@ -301,7 +364,7 @@
+   }
+   if(eq)
+     *eq = s;
+-  
++
+   while(s < es && strchr(whitespace, *s))
+     s++;
+   *ps = s;
+@@ -312,7 +375,7 @@
+ peek(char **ps, char *es, char *toks)
+ {
+   char *s;
+-  
++
+   s = *ps;
+   while(s < es && strchr(whitespace, *s))
+     s++;
+@@ -420,7 +483,7 @@
+   int tok, argc;
+   struct execcmd *cmd;
+   struct cmd *ret;
+-  
++
+   if(peek(ps, es, "("))
+     return parseblock(ps, es);
+ 
+@@ -459,7 +522,7 @@
+ 
+   if(cmd == 0)
+     return 0;
+-  
++
+   switch(cmd->type){
+   case EXEC:
+     ecmd = (struct execcmd*)cmd;
+@@ -478,7 +541,7 @@
+     nulterminate(pcmd->left);
+     nulterminate(pcmd->right);
+     break;
+-    
++
+   case LIST:
+     lcmd = (struct listcmd*)cmd;
+     nulterminate(lcmd->left);
+Index: syscall.c
+===================================================================
+--- syscall.c	(revision 1)
++++ syscall.c	(working copy)
+@@ -55,7 +55,7 @@
+ argptr(int n, char **pp, int size)
+ {
+   int i;
+-  
++
+   if(argint(n, &i) < 0)
+     return -1;
+   if((uint)i >= proc->sz || (uint)i+size > proc->sz)
+@@ -99,6 +99,12 @@
+ extern int sys_write(void);
+ extern int sys_uptime(void);
+ 
++/* A&T signal syscall */
++extern int sys_signal(void);
++
++/* A&T sigsend syscall */
++extern int sys_sigsend(void);
++
+ static int (*syscalls[])(void) = {
+ [SYS_fork]    sys_fork,
+ [SYS_exit]    sys_exit,
+@@ -121,6 +127,8 @@
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_signal]  sys_signal,
++[SYS_sigsend] sys_sigsend,
+ };
+ 
+ void
+Index: syscall.h
+===================================================================
+--- syscall.h	(revision 1)
++++ syscall.h	(working copy)
+@@ -21,3 +21,8 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++
++/* A&T signal syscall */
++#define SYS_signal 22
++/* A&T sigsend syscall */
++#define SYS_sigsend 23
+Index: usys.S
+===================================================================
+--- usys.S	(revision 1)
++++ usys.S	(working copy)
+@@ -29,3 +29,5 @@
+ SYSCALL(sbrk)
+ SYSCALL(sleep)
+ SYSCALL(uptime)
++SYSCALL(signal)                 /* A&T signal system call*/
++SYSCALL(sigsend)                /* A&T sigsend system call*/
+Index: sysproc.c
+===================================================================
+--- sysproc.c	(revision 1)
++++ sysproc.c	(working copy)
+@@ -60,7 +60,7 @@
+ {
+   int n;
+   uint ticks0;
+-  
++
+   if(argint(0, &n) < 0)
+     return -1;
+   acquire(&tickslock);
+@@ -82,9 +82,34 @@
+ sys_uptime(void)
+ {
+   uint xticks;
+-  
++
+   acquire(&tickslock);
+   xticks = ticks;
+   release(&tickslock);
+   return xticks;
+ }
++
++/* A&T - signal syscall */
++int sys_signal(void)
++{
++    int signum;
++    int handler;
++
++    if ((argint(0, &signum) < 0) || (argint(1, &handler) < 0))
++        return -1;
++
++    proc->handlers[signum] = (sighandler_t)handler;
++
++    return 0;
++}
++
++/* A&T - sigsend syscall */
++int sys_sigsend(void)
++{
++    int pid;
++    int signum;
++
++    if ((argint(0, &pid) < 0) || (argint(1, &signum) < 0))
++        return -1;
++    return sigsend(pid, signum);
++}
+Index: proc.c
+===================================================================
+--- proc.c	(revision 1)
++++ proc.c	(working copy)
+@@ -7,6 +7,8 @@
+ #include "proc.h"
+ #include "spinlock.h"
+ 
++void* memcpy(void *dst, const void *src, uint n);
++
+ struct {
+   struct spinlock lock;
+   struct proc proc[NPROC];
+@@ -26,6 +28,29 @@
+   initlock(&ptable.lock, "ptable");
+ }
+ 
++/*A&T default  signals 0-3 */
++
++/*A&T terminates a process */
++
++void sigusr1() {
++    cprintf("SIGUSR1 %d\n", proc->pid);
++}
++
++void sigusr2() {
++    cprintf("SIGUSR2 %d\n", proc->pid);
++}
++
++void sigchld() {
++    /* sigsend(proc->parent->pid, SIGCHLD); */
++    return;
++}
++
++void  sigint() {
++    proc->killed = 1;
++}
++
++//A&T end of default signals
++
+ //PAGEBREAK: 32
+ // Look in the process table for an UNUSED proc.
+ // If found, change state to EMBRYO and initialize
+@@ -55,11 +80,11 @@
+     return 0;
+   }
+   sp = p->kstack + KSTACKSIZE;
+-  
++
+   // Leave room for trap frame.
+   sp -= sizeof *p->tf;
+   p->tf = (struct trapframe*)sp;
+-  
++
+   // Set up new context to start executing at forkret,
+   // which returns to trapret.
+   sp -= 4;
+@@ -69,7 +94,12 @@
+   p->context = (struct context*)sp;
+   memset(p->context, 0, sizeof *p->context);
+   p->context->eip = (uint)forkret;
++  /* A&T - SIGNALS begin */
+ 
++  p->signal = 0;
++  memset(p->handlers, 0, 32);   /* initialize handlers to 0 (NULL) */
++  /* A&T - SIGNAL end */
++
+   return p;
+ }
+ 
+@@ -80,7 +110,7 @@
+ {
+   struct proc *p;
+   extern char _binary_initcode_start[], _binary_initcode_size[];
+-  
++
+   p = allocproc();
+   initproc = p;
+   if((p->pgdir = setupkvm(kalloc)) == 0)
+@@ -108,7 +138,7 @@
+ growproc(int n)
+ {
+   uint sz;
+-  
++
+   sz = proc->sz;
+   if(n > 0){
+     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
+@@ -145,6 +175,8 @@
+   np->sz = proc->sz;
+   np->parent = proc;
+   *np->tf = *proc->tf;
++  memcpy(np->handlers, proc->handlers, 32); /* A&T - deep-copy the array of
++                                               handlers from the parent. */
+ 
+   // Clear %eax so that fork returns 0 in the child.
+   np->tf->eax = 0;
+@@ -153,7 +185,7 @@
+     if(proc->ofile[i])
+       np->ofile[i] = filedup(proc->ofile[i]);
+   np->cwd = idup(proc->cwd);
+- 
++
+   pid = np->pid;
+   np->state = RUNNABLE;
+   safestrcpy(np->name, proc->name, sizeof(proc->name));
+@@ -185,6 +217,10 @@
+ 
+   acquire(&ptable.lock);
+ 
++  //A&T sent a SIGCHLD to the parent process
++  sigsend(proc->parent->pid,SIGCHLD);
++
++
+   // Parent might be sleeping in wait().
+   wakeup1(proc->parent);
+ 
+@@ -196,7 +232,6 @@
+         wakeup1(initproc);
+     }
+   }
+-
+   // Jump into the scheduler, never to return.
+   proc->state = ZOMBIE;
+   sched();
+@@ -275,6 +310,8 @@
+ scheduler(void)
+ {
+   struct proc *p;
++  uint mask;
++  sighandler_t *handler;
+ 
+   for(;;){
+     // Enable interrupts on this processor.
+@@ -291,6 +328,47 @@
+       // before jumping back to us.
+       proc = p;
+       switchuvm(p);
++
++      /* A&T - SIGNALS start */
++      if (p->signal != 0) {	/* A&T - were any signals recieved? */
++          /* cprintf("DEBUG: pid=%d, p->signal=%d\n", p->pid, p->signal); */
++          mask = (1 << 31);	/* the stack is a LIFO structure, so
++                                 * we'll be pushing the LEAST important
++                                 * signals first, so they'll run last. */
++          /* cprintf("DEBUG: mask=%d\n", mask); */
++          handler = &proc->handlers[31];
++          while(mask > 8) {/* a mask to check whether a signal's
++                              bit is up - not for builtin 3 signal
++                              hadlers, since they should be called
++                              from kernel space and not userspace. */
++              if ((p->signal & mask) && (*handler != 0))
++                  register_handler(*handler); /* add the handler to
++                                                 the stack, if it exists */
++
++
++              mask >>= 1;	/* move the mask to the next bit to check. */
++              handler--;	/* move the pointer to the next hendler */
++          }
++          while (mask > 0) {
++              if (p->signal & mask) {
++                  if (*handler == 0) /* call the built-in handler */
++                      switch(mask) {
++                      case 8: sigchld(); break;
++                      case 4: sigusr2(); break;
++                      case 2: sigusr1(); break;
++                      case 1: sigint(); break;
++                      default: break;
++                      }
++                  else
++                      register_handler(*handler);
++              }
++              mask >>= 1;
++              handler--;
++          }
++          p->signal = 0;	/* initialize the signal data word to 0 */
++      }
++      /* A&T - SIGNALS end */
++
+       p->state = RUNNING;
+       swtch(&cpu->scheduler, proc->context);
+       switchkvm();
+@@ -345,12 +423,12 @@
+ 
+   if (first) {
+     // Some initialization functions must be run in the context
+-    // of a regular process (e.g., they call sleep), and thus cannot 
++    // of a regular process (e.g., they call sleep), and thus cannot
+     // be run from main().
+     first = 0;
+     initlog();
+   }
+-  
++
+   // Return to "caller", actually trapret (see allocproc).
+ }
+ 
+@@ -455,7 +533,7 @@
+   struct proc *p;
+   char *state;
+   uint pc[10];
+-  
++
+   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+     if(p->state == UNUSED)
+       continue;
+@@ -472,5 +550,36 @@
+     cprintf("\n");
+   }
+ }
++//A&T - kills a process after ^C is preesend
++void
++killcurrent()
++{
++    struct proc *p;
+ 
++    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
++        if ((p != initproc) && (p->state != UNUSED) && (p->state != EMBRYO)
++              /* && !((p->name[0] == 's') && */
++              /*      (p->name[1] == 'h') && (p->name[2] == 0)) */
++            && (p->parent->pid == 2)){ /* kill the process whose
++                                          parent is the shell
++                                          (pid == 2 == shell) */
++            sigsend(p->pid,SIGINT);
++            return;
++        }
++    }
++}
+ 
++
++/* A&T sigsend */
++int
++sigsend(int pid, int signum) {
++    struct proc *p;
++
++    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
++        if(p->pid == pid){
++            p->signal |= (1 << signum);
++            return 0;
++        }
++    }
++    return -1;                  /* no process with this pid */
++}
+Index: proc.h
+===================================================================
+--- proc.h	(revision 1)
++++ proc.h	(working copy)
+@@ -10,7 +10,7 @@
+   volatile uint started;        // Has the CPU started?
+   int ncli;                    // Depth of pushcli nesting.
+   int intena;                  // Were interrupts enabled before pushcli?
+-  
++
+   // Cpu-local storage variables; see below
+   struct cpu *cpu;
+   struct proc *proc;           // The currently-running process.
+@@ -68,10 +68,21 @@
+   struct file *ofile[NOFILE];  // Open files
+   struct inode *cwd;           // Current directory
+   char name[16];               // Process name (debugging)
+-};
+ 
++  uint signal;                 /* A&T data word to hold received
++                                  signals */
++  sighandler_t handlers[32];   /* A&T every entry is a pointer to a
++                                  function (accepting no arguments and
++                                  returning no value) */
++}
++;
++
+ // Process memory is laid out contiguously, low addresses first:
+ //   text
+ //   original data and bss
+ //   fixed-size stack
+ //   expandable heap
++
++
++/* A&T */
++int sigsend (int pid, int signum);
+Index: main.c
+===================================================================
+--- main.c	(revision 1)
++++ main.c	(working copy)
+@@ -46,7 +46,7 @@
+ static void
+ mpenter(void)
+ {
+-  switchkvm(); 
++  switchkvm();
+   seginit();
+   lapicinit(cpunum());
+   mpmain();
+@@ -83,7 +83,7 @@
+     if(c == cpus+cpunum())  // We've started already.
+       continue;
+ 
+-    // Tell entryother.S what stack to use, where to enter, and what 
++    // Tell entryother.S what stack to use, where to enter, and what
+     // pgdir to use. We cannot use kpgdir yet, because the AP processor
+     // is running in low  memory, so we use entrypgdir for the APs too.
+     stack = kalloc();
+@@ -101,7 +101,7 @@
+ 
+ // Boot page table used in entry.S and entryother.S.
+ // Page directories (and page tables), must start on a page boundary,
+-// hence the "__aligned__" attribute.  
++// hence the "__aligned__" attribute.
+ // Use PTE_PS in page directory entry to enable 4Mbyte pages.
+ __attribute__((__aligned__(PGSIZE)))
+ pde_t entrypgdir[NPDENTRIES] = {
+@@ -113,4 +113,3 @@
+ 
+ //PAGEBREAK!
+ // Blank page.
+-
+Index: defs.h
+===================================================================
+--- defs.h	(revision 1)
++++ defs.h	(working copy)
+@@ -116,7 +116,15 @@
+ int             wait(void);
+ void            wakeup(void*);
+ void            yield(void);
++//A&T - sends SIGINT to current running process
++void            killcurrent(void);
+ 
++//A&T signal macros
++#define SIGINT  0
++#define SIGUSR1 1
++#define SIGUSR2 2
++#define SIGCHLD 3
++
+ // swtch.S
+ void            swtch(struct context**, struct context*);
+ 
+Index: console.c
+===================================================================
+--- console.c	(revision 1)
++++ console.c	(working copy)
+@@ -107,7 +107,7 @@
+ {
+   int i;
+   uint pcs[10];
+-  
++
+   cli();
+   cons.locking = 0;
+   cprintf("cpu%d: panic: ", cpu->id);
+@@ -130,7 +130,7 @@
+ cgaputc(int c)
+ {
+   int pos;
+-  
++
+   // Cursor position: col + 80*row.
+   outb(CRTPORT, 14);
+   pos = inb(CRTPORT+1) << 8;
+@@ -143,13 +143,13 @@
+     if(pos > 0) --pos;
+   } else
+     crt[pos++] = (c&0xff) | 0x0700;  // black on white
+-  
++
+   if((pos/80) >= 24){  // Scroll up.
+     memmove(crt, crt+80, sizeof(crt[0])*23*80);
+     pos -= 80;
+     memset(crt+pos, 0, sizeof(crt[0])*(24*80 - pos));
+   }
+-  
++
+   outb(CRTPORT, 14);
+   outb(CRTPORT+1, pos>>8);
+   outb(CRTPORT, 15);
+@@ -191,8 +191,11 @@
+ 
+   acquire(&input.lock);
+   while((c = getc()) >= 0){
+-    switch(c){
+-    case C('P'):  // Process listing.
++      switch(c){
++      case C('C'): // A&T sigint
++          killcurrent(); // A&T -  sending the SIGINT in proc.c
++          break;
++      case C('P'):  // Process listing.
+       procdump();
+       break;
+     case C('U'):  // Kill line.
+@@ -290,4 +293,3 @@
+   picenable(IRQ_KBD);
+   ioapicenable(IRQ_KBD, 0);
+ }
+-
+Index: user.h
+===================================================================
+--- user.h	(revision 1)
++++ user.h	(working copy)
+@@ -1,5 +1,8 @@
+ struct stat;
+ 
++/* A&T - for use in 'int signal(int, sighandler_t)' */
++typedef void (*sighandler_t)(void);
++
+ // system calls
+ int fork(void);
+ int exit(void) __attribute__((noreturn));
+@@ -22,6 +25,9 @@
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++/* A&T syscalls */
++int signal(int, sighandler_t);
++int sigsend(int, int);
+ 
+ // ulib.c
+ int stat(char*, struct stat*);
+Index: Makefile
+===================================================================
+--- Makefile	(revision 1)
++++ Makefile	(working copy)
+@@ -32,7 +32,7 @@
+ #TOOLPREFIX = i386-jos-elf-
+ 
+ # Using native tools (e.g., on X86 Linux)
+-#TOOLPREFIX = 
++#TOOLPREFIX =
+ 
+ # Try to infer the correct TOOLPREFIX if not set
+ ifndef TOOLPREFIX
+@@ -51,7 +51,7 @@
+ endif
+ 
+ # If the makefile can't find QEMU, specify its path here
+-#QEMU = 
++#QEMU =
+ 
+ # Try to infer the correct QEMU
+ ifndef QEMU
+@@ -164,13 +164,14 @@
+ 	_usertests\
+ 	_wc\
+ 	_zombie\
++	_sanity\
+ 
+ fs.img: mkfs README $(UPROGS)
+ 	./mkfs fs.img README $(UPROGS)
+ 
+ -include *.d
+ 
+-clean: 
++clean:
+ 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
+ 	*.o *.d *.asm *.sym vectors.S bootblock entryother \
+ 	initcode initcode.out kernel xv6.img fs.img kernelmemfs mkfs \
+@@ -234,6 +235,7 @@
+ 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
+ 	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
+ 	printf.c umalloc.c\
++	sanity.c\
+ 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
+ 	.gdbinit.tmpl gdbutil\
+ 

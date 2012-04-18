@@ -41,7 +41,8 @@ void sigusr2() {
 }
 
 void sigchld() {
-    sigsend(proc->parent->pid, SIGCHLD);
+    /* sigsend(proc->parent->pid, SIGCHLD); */
+    return;
 }
 
 void  sigint() {
