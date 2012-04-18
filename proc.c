@@ -557,8 +557,11 @@ killcurrent()
 
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
         if ((p != initproc) && (p->state != UNUSED) && (p->state != EMBRYO)
-              && !((p->name[0] == 's') &&
-               (p->name[1] == 'h') && (p->name[2] == 0))){
+              /* && !((p->name[0] == 's') && */
+              /*      (p->name[1] == 'h') && (p->name[2] == 0)) */
+            && (p->parent->pid == 2)){ /* kill the process whose
+                                          parent is the shell
+                                          (pid == 2 == shell) */
             sigsend(p->pid,SIGINT);
             return;
         }
